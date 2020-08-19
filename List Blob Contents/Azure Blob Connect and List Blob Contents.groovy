@@ -1,15 +1,14 @@
 /*------------------------------------------------/
-Script Name:  Retrieve Azure Blob Contents
+Script Name:  Azure Blob Connect and List Blob Contents
 Creation Date: XX-XX-XXXX
 Author: Mitchell Franklin
-Description: Dell Boomi Charges for Connections; this script allows an Azure Blob Item to be retrieved.
-Last Update Date: XX-XX-XXXX
+Description: Dell Boomi Connector does not handle listing of blobs at present; this script allows an Azure Blob to be connect to and retrieve its listing.
+Last Update Date: 19-08-2020
 Last Update By: Mitchell Franklin
-Last Update Description: Initial Script Creation
+Last Update Description: Enhancement of script to leverage pre-determined dynamic process property information via documented process
 /-------------------------------------------------*/
 
 /*Notes*/
-//Update areas defined that start with <$ and end with $> i.e. <$Value$>//
 //Use Process Property to Set Values and remember to set in Extensions of the Process Flow; use dynamic process properties (Set Properties) to read the values in to use in the below process.
 //Set Decision Shape after this to check they try catch Dynamic Process Try Catch for errors - Boomi try Catch does not work on Custom Scriptting
 
@@ -35,17 +34,35 @@ for (int i = 0; i < dataContext.getDataCount(); i++) {
         StringBuffer response = new StringBuffer();
 
         //Get and retrieve the required Process Properties that will build up the URL to be called
-        String host = ExecutionUtil.getDynamicProcessProperty("<$Dynamic Process Property Name$>"); //Get the Blob URI that is the Host Name for the Storage Blob
-        String blobName = ExecutionUtil.getDynamicProcessProperty("<$Dynamic Process Property Name$>"); //Get the Blob URI that is the Host Name for the Storage Blob
-        String sv = ExecutionUtil.getDynamicProcessProperty("<$Dynamic Process Property Name$>"); //Get the Storage Version used for Blob
-        String sr = ExecutionUtil.getDynamicProcessProperty("<$Dynamic Process Property Name$>"); //Get the Storage Resource i.e. c for container
-        String si = ExecutionUtil.getDynamicProcessProperty("<$Dynamic Process Property Name$>"); //Get the  Storage ID used within the container
-        String sig = ExecutionUtil.getDynamicProcessProperty("<$Dynamic Process Property Name$>"); //Get the Signtaure that allows the access to the Storage Blob
-     
+        String host = ExecutionUtil.getDynamicProcessProperty("dpp Blob URI"); //Get the Blob URI that is the Host Name for the Storage Blob
+        String sv = ExecutionUtil.getDynamicProcessProperty("dpp Storage Service Version"); //Get the Storage Version used for Blob
+        String sr = ExecutionUtil.getDynamicProcessProperty("dpp Storage Resource"); //Get the Storage Resource i.e. c for container
+        String si = ExecutionUtil.getDynamicProcessProperty("dpp Storage ID"); //Get the  Storage ID used within the container
+        String sig = ExecutionUtil.getDynamicProcessProperty("dpp Signature"); //Get the Signtaure that allows the access to the Storage Blob
+        String maxResults = ExecutionUtil.getDynamicProcessProperty("dpp Max Results"); //Get the Max Results; if not set then set to Maximum of 5,000 as blank or 0 cause the API to error
+        //Max Results Check
+        if (maxResults != null && !maxResults.isEmpty()) {
+            maxResults = maxResults
+        } else {
+            maxResults = '5000'
+        }
 
 
-        //Create the Full URL to be called to Retrieve the BloB
-        String azureURL = host + '/' + blobName + '?si=' + si + '&sv=' + sv + '&sr=' + sr + '&sig=' + sig
+
+        //Set the Azure Blob List Parameters
+        String parameters = "&restype=container&comp=list";
+
+        //If the results have been limited or are greater than 5,000 we need to set the marker value to retrieve the next data sets
+        String nextMarker = ExecutionUtil.getDynamicProcessProperty("dpp Azure Next Marker");
+        if (nextMarker != null && !maxResults.isEmpty()) {
+            nextMarker = nextMarker
+        } else {
+            nextMarker = '' //If the marker is not required the URI parameter can still be provided but we set it as blank that way we only need to create the azureURL once
+        }
+
+
+        //Create the Full URL to be called 
+        String azureURL = host + '?si=' + si + '&sv=' + sv + '&sr=' + sr + '&sig=' + sig + parameters + '&maxresults=' + maxResults + '&marker=' + nextMarker
 
 
 
@@ -69,13 +86,15 @@ for (int i = 0; i < dataContext.getDataCount(); i++) {
 
 
     } catch (Exception ex) {
-    //Error has occure; capture the error and send it back out as a dynamic proecss property for it to be checked and handled.
+        //Error has occure; capture the error and send it back out as a dynamic proecss property for it to be checked and handled.
 
-        ExecutionUtil.setDynamicProcessProperty("<$Dynamic Process Property Trty Catch Name$>", ex.toString(), true);
+        ExecutionUtil.setDynamicProcessProperty("dpp Azure List TryCatch", ex.toString(), true);
+
+        //Set the stream back with the existing payload to allow Boomi to continue moving forward to another shape.
         dataContext.storeStream(is, props);
     }
 
 
-/*--------Boomi Do not touch--------*/
+    /*--------Boomi Do not touch--------*/
 }
 /*----------------------------------*/
